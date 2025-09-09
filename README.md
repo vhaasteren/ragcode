@@ -389,5 +389,6 @@ These files allow `query`/`dump` to **reuse** the exact embedding model used at 
 
 ## License
 
-MIT © Rutger + ChatGPT
+MIT © Rutger van Haasteren
+    (aided by ChatGPT, Grok, Claude)
 
