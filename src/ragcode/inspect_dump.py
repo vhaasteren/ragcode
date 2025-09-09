@@ -3,6 +3,11 @@ import json
 from pathlib import Path
 from typing import Dict, Any, List, Tuple
 
+from dotenv import load_dotenv
+from llama_index.core import StorageContext, load_index_from_storage
+
+from .embeddings import setup_embeddings_from_string  # NEW
+
 try:
     from rank_bm25 import BM25Okapi
 except Exception:
@@ -55,13 +60,13 @@ def _extract_text_meta(obj: Any) -> Tuple[str, Dict[str, Any]]:
         if isinstance(text, str) and text:
             return text, meta if isinstance(meta, dict) else {}
 
-    return "", {}
+    return "" , {}
 
 
 def _load_nodes_for_dump(persist_dir: Path) -> List[Dict[str, Any]]:
     """
     Produce a list of {"text": str, "metadata": dict} for all nodes in docstore.
-    Works against LI 0.13.6 simple_kvstore.
+    Works against LI 0.13.6 simple_kvstore. (Fallback path used only if retriever fails.)
     """
     raw = _read_docstore(persist_dir)
     container = None
@@ -126,9 +131,62 @@ def inspect_index(persist_dir: Path) -> str:
     return "\n".join(lines)
 
 
+# ---- NEW helpers: align embed model with the one used at index time ----------
+
+def _load_manifest_embed(persist_dir: Path) -> str | None:
+    mf = persist_dir / "manifest.json"
+    if not mf.exists():
+        return None
+    try:
+        data = json.loads(mf.read_text(encoding="utf-8"))
+        prof = data.get("profile") or {}
+        return prof.get("embed")
+    except Exception:
+        return None
+
+
+def _prepare_embeddings_for_retrieval(persist_dir: Path) -> None:
+    """
+    Ensure Settings.embed_model matches the model used at index time.
+    """
+    load_dotenv(".env")
+    embed_spec = _load_manifest_embed(persist_dir)
+    setup_embeddings_from_string(embed_spec)
+
+
+# ---- Retrieval-first dump ----------------------------------------------------
+
+def _retrieve_topk_via_index(persist_dir: Path, query: str, k: int) -> List[Dict[str, Any]]:
+    """
+    Load the index and retrieve top-k nodes using the vector retriever (no chat).
+    Returns a list of dicts with "text" and "metadata".
+    """
+    # CRITICAL: align embedding backend before loading the index/retriever
+    _prepare_embeddings_for_retrieval(persist_dir)
+
+    storage = StorageContext.from_defaults(persist_dir=str(persist_dir))
+    index = load_index_from_storage(storage)
+    retriever = index.as_retriever(similarity_top_k=k)
+    nodes = retriever.retrieve(query)
+    out: List[Dict[str, Any]] = []
+    for n in nodes:
+        # n can be NodeWithScore or TextNode; handle both
+        node = getattr(n, "node", n)
+        text = node.get_content(metadata_mode="none") if hasattr(node, "get_content") else getattr(node, "text", "")
+        meta = getattr(node, "metadata", {}) or {}
+        if text:
+            out.append({"text": text, "metadata": dict(meta)})
+    return out
+
+
 def dump_snippets_md(persist_dir: Path, query: str, k: int, out_path: Path) -> Path:
-    nodes = _load_nodes_for_dump(persist_dir)
-    topk = _bm25_topk(nodes, query, k)
+    # 1) Preferred path: use retriever (robust across LI storage shapes)
+    topk = _retrieve_topk_via_index(persist_dir, query, k)
+
+    # 2) If retriever returned nothing (should be rare), try docstore+BM25 as a fallback
+    if not topk:
+        nodes = _load_nodes_for_dump(persist_dir)
+        topk = _bm25_topk(nodes, query, k)
 
     with out_path.open("w", encoding="utf-8") as f:
         f.write(f"# Context pack for: {query}\n\n")
@@ -141,11 +199,11 @@ def dump_snippets_md(persist_dir: Path, query: str, k: int, out_path: Path) -> P
                 f.write("\n```\n\n")
             return out_path
 
-        # ---- robust fallback: call the regular query pipeline so you at least get an answer+sources
+        # 3) Final fallback: synthesized answer (very unlikely now)
         try:
             from .query import query_index  # local import to avoid cycles
             res = query_index(persist_dir, query, k=k, citations=True, hybrid=True, format_="md")
-            f.write("_No nodes loaded from docstore; dumping synthesized answer instead._\n\n")
+            f.write("_No nodes loaded; dumping synthesized answer instead._\n\n")
             f.write(res.get("content", ""))
         except Exception as e:
             f.write(f"_No matching snippets found; and query fallback failed: {e}_\n")
@@ -153,10 +211,14 @@ def dump_snippets_md(persist_dir: Path, query: str, k: int, out_path: Path) -> P
 
 
 def dump_snippets_jsonl(persist_dir: Path, query: str, k: int, out_path: Path) -> Path:
-    nodes = _load_nodes_for_dump(persist_dir)
-    topk = _bm25_topk(nodes, query, k)
+    # Same retrieval-first logic for JSONL
+    topk = _retrieve_topk_via_index(persist_dir, query, k)
     if not topk:
-        # fallback: single synthesized answer line
+        nodes = _load_nodes_for_dump(persist_dir)
+        topk = _bm25_topk(nodes, query, k)
+
+    if not topk:
+        # last resort: single synthesized answer line
         try:
             from .query import query_index
             res = query_index(persist_dir, query, k=k, citations=True, hybrid=True, format_="jsonl")
