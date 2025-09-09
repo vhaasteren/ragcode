@@ -35,13 +35,14 @@ def index(
     repo: str = typer.Option(None, help="GitHub owner/repo (overrides profile.repo)"),
     ref: str = typer.Option(None, help="Git ref/branch/tag (overrides profile.ref)"),
     persist: str = typer.Option(None, help="Persist dir (overrides profile.persist)"),
+    incremental: bool = typer.Option(True, "--incremental/--no-incremental", help="Incremental update instead of full rebuild"),
 ):
     p = _profile(profile, local_config)
     if path: p.path = path
     if repo: p.repo = repo
     if ref: p.ref = ref
     if persist: p.persist = persist
-    manifest = build_index(p)
+    manifest = build_index(p, incremental=incremental)
     rprint(manifest)
 
 @app.command()
