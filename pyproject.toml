@@ -1,0 +1,57 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ragcode"
+version = "0.1.0"
+description = "Repo-aware RAG CLI for LLM-assisted coding (PINT preset included)"
+readme = "README.md"
+authors = [{ name = "Rutger + ChatGPT" }]
+license = { text = "MIT" }
+requires-python = ">=3.10"
+dependencies = [
+  # CLI/UI
+  "typer[all]==0.12.3",
+  "click==8.1.7",
+  "rich==14.1.0",
+  "pydantic==2.11.7",
+  "tomlkit==0.12.4",
+  "python-dotenv==1.1.1",
+
+  # API server
+  "fastapi==0.111.0",
+  "uvicorn==0.30.0",
+
+  # File watching
+  "watchdog==4.0.1",
+
+  # Retrieval helpers
+  "rank-bm25==0.2.2",
+
+  # LlamaIndex stack — pinned to your environment
+  "llama-index-core==0.13.6",
+  "llama-index-readers-github==0.8.1",
+  "llama-index-llms-openai==0.5.5",
+
+  # Code-aware splitting (match your environment)
+  "tree-sitter-language-pack==0.9.0",
+  "tree-sitter==0.25.1",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest==8.4.2",
+  "ruff==0.6.9",
+  "mypy==1.11.2",
+]
+
+[project.scripts]
+ragcode = "ragcode.cli:app"
+
+[tool.setuptools.package-data]
+ragcode = ["profiles/*.toml"]
+
+[tool.ruff]
+line-length = 100
+

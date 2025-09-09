@@ -1,0 +1,26 @@
+# Python & general
+*.patch
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+.build/
+.venv/
+.env
+*.patch
+/out/
+*snapshot*.txt
+state/
+
+
+# Editor/OS
+.DS_Store
+.vscode/
+.idea/
+*~
+*.swp
+
+# Custom files
+ideas.txt

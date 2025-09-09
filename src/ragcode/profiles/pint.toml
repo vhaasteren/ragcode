@@ -1,0 +1,16 @@
+name = "pint"
+repo = "nanograv/PINT"
+ref = "master"
+include = ["src", "docs", "examples", "tests"]
+ext = [".py", ".md", ".rst", ".txt"]
+persist = "~/.ragcode/indexes/pint"
+embed = "openai:text-embedding-3-large"
+store = "llamaindex"
+hybrid = true
+reranker = "none"
+chunk_lines = 80
+chunk_overlap = 20
+symbol_chunks = true
+parallel = 8
+max_file_size_kb = 1024
+
