@@ -11,10 +11,15 @@ from llama_index.llms.openai import OpenAI
 from .config import Profile, ensure_dir
 from .logging import info, warn
 from .symbols import extract_python_symbols
+from .embeddings import setup_embeddings_from_string
 
 def _setup_llm():
     # Minimal: set an LLM for LlamaIndex (used for synthesis; embeddings configured via profile)
     Settings.llm = OpenAI(model="gpt-4o-mini")
+
+def _setup_embeddings(profile: Profile):
+    # Configure the embedding backend per profile.embed (openai|local|ollama)
+    setup_embeddings_from_string(profile.embed)
 
 def _tree_sitter_ok() -> bool:
     try:
@@ -48,7 +53,7 @@ def _load_from_github(profile: Profile) -> List[Document]:
         repo=profile.repo.split("/")[1],
         use_parser=False,
         verbose=True,
-        concurrent_requests=5,
+        concurrent_requests=2,
         filter_directories=(profile.include, GithubRepositoryReader.FilterType.INCLUDE),
         filter_file_extensions=(profile.ext, GithubRepositoryReader.FilterType.INCLUDE),
     )
@@ -80,6 +85,7 @@ def _commit_sha_hint(profile: Profile) -> str:
 def build_index(profile: Profile) -> Dict[str, Any]:
     load_dotenv(".env")
     _setup_llm()
+    _setup_embeddings(profile)
 
     persist_dir = Path(os.path.expanduser(profile.persist))
     ensure_dir(persist_dir)

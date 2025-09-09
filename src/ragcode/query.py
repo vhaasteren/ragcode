@@ -8,6 +8,7 @@ from llama_index.core.query_engine import CitationQueryEngine
 from llama_index.llms.openai import OpenAI
 from rank_bm25 import BM25Okapi
 from .logging import info
+from .embeddings import setup_embeddings_from_string
 import json
 
 def _setup_llm():
@@ -18,15 +19,33 @@ def _load_index(persist_dir: Path):
     index = load_index_from_storage(storage_context)
     return index
 
+def _load_manifest_embed(persist_dir: Path) -> Optional[str]:
+    mf = persist_dir / "manifest.json"
+    if not mf.exists():
+        return None
+    try:
+        data = json.loads(mf.read_text(encoding="utf-8"))
+        prof = data.get("profile") or {}
+        return prof.get("embed")
+    except Exception:
+        return None
+
 def _load_nodes_texts(persist_dir: Path) -> List[Dict[str, Any]]:
     # LlamaIndex persists nodes in docstore.json; we'll read it to build BM25 corpus
     docstore_path = persist_dir / "docstore.json"
     if not docstore_path.exists():
         return []
     data = json.loads(docstore_path.read_text(encoding="utf-8"))
-    # Format depends on LI version; handle common shape
+    # Handle common shapes ("docstore_data" or "data")
+    container = None
+    if "docstore_data" in data and isinstance(data["docstore_data"], dict):
+        container = data["docstore_data"]
+    elif "data" in data and isinstance(data["data"], dict):
+        container = data["data"]
+    else:
+        return []
     result = []
-    for _, node in data.get("docstore_data", {}).items():
+    for _, node in container.items():
         text = node.get("text") or node.get("node", {}).get("text") or ""
         meta = node.get("metadata", {}) or node.get("node", {}).get("metadata", {})
         result.append({"text": text, "metadata": meta, "ref_id": node.get("id_", "")})
@@ -51,7 +70,12 @@ def query_index(
     format_: str = "md",
 ) -> Dict[str, Any]:
     load_dotenv(".env")
+
+    # Ensure LLM + the SAME embedding backend used at index time (read from manifest)
     _setup_llm()
+    embed_spec = _load_manifest_embed(persist_dir)
+    setup_embeddings_from_string(embed_spec)
+
     index = _load_index(persist_dir)
 
     # Vector + citations engine

@@ -7,8 +7,9 @@ A repo-aware RAG CLI to supercharge LLM-assisted coding. Designed to index large
 
 ```bash
 pip install -e .
-ragcode inspect                 # sanity check
-ragcode index --profile pint    # index NANOGrav/PINT at master
+
+# default profile uses OpenAI embeddings
+ragcode index --profile pint
 ragcode query "simulate fake pulsar dataset ~1000 TOAs over 15yr" --k 8 --citations
 ragcode dump --query "ModelBuilder parse .par and residuals" --k 12 --out cursor_context.md
 ragcode serve --host 127.0.0.1 --port 8008
